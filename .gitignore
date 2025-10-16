@@ -14,3 +14,12 @@ lib/*
 .env
 .env.example
 package-lock.json
+
+dApp/.next/
+dApp/node_modules/
+dApp/.env/
+dApp/package-lock.json
+dApp/yarn.lock
+
+
+
