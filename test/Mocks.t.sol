@@ -3,19 +3,17 @@ pragma solidity ^0.8.20;
 
 import "forge-std/Test.sol";
 
-interface IOracle {
-    function getPrice(address token) external view returns (uint256);
+import {IOracle, IPermit2} from "../src/DegenAiPool.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 
-    function update(
-        address[] calldata tokens,
-        uint256[] calldata prices
-    ) external;
+contract ERC20Mock is ERC20Upgradeable {
+    constructor(address initialAccount, uint256 initialBalance) {
+        _mint(initialAccount, initialBalance);
+    }
 
-}
-
-
-interface IPermit2 {
-    function approve(address, address, uint160, uint48) external;
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
 }
 
 contract MockPermit2 is IPermit2 {

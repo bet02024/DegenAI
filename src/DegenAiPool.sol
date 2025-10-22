@@ -11,8 +11,10 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {PoolKey} from "@uniswap/v4-core/src/types/PoolKey.sol";
 import {Currency} from "@uniswap/v4-core/src/types/Currency.sol";
 import {IHooks} from "@uniswap/v4-core/src/interfaces/IHooks.sol";
-import {Commands} from "@uniswap/universal-router/libraries/Commands.sol";
-import {IUniversalRouter} from "@uniswap/universal-router/interfaces/IUniversalRouter.sol";
+
+import {Commands} from "@uniswap/universal-router/contracts/libraries/Commands.sol";
+import {IUniversalRouter} from "@uniswap/universal-router/contracts/interfaces/IUniversalRouter.sol";
+
 import {IV4Router} from  "@uniswap/v4-periphery/src/interfaces/IV4Router.sol";
 import {Actions} from "@uniswap/v4-periphery/src/libraries/Actions.sol";
 import {console} from "forge-std/console.sol";
