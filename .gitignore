@@ -7,7 +7,6 @@ out/
 /broadcast/**/dry-run/
 docs/
 cache/
-node_nodules/
 lib/*
 .DS_Store
 
@@ -20,6 +19,7 @@ dApp/node_modules/
 dApp/.env/
 dApp/package-lock.json
 dApp/yarn.lock
+node_modules/
 
 
 

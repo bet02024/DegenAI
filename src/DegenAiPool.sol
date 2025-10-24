@@ -22,7 +22,10 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 
 
 interface IOracle {
-    function getPrice(address token) external view returns (uint256);
+    function getPrices(
+        bytes32[] memory tokenPricesId,
+        bytes[] calldata pythUpdateData
+    ) external payable returns (uint256[] memory);
 }
 interface IPermit2 {
     function approve(address token, address spender, uint160 amount, uint48 expiration) external;
@@ -47,6 +50,10 @@ contract DegenAiPool is Initializable, UUPSUpgradeable, AccessControlUpgradeable
     address[] private portfolioAssets;
     address[] private whitelistedAssets;
 
+    mapping(address => bytes32) public tokensToPriceIds;
+    mapping(bytes32 => address) public pricesIdToTokens;
+
+
     // Returns the list of current portfolio assets
     function portfolioAssetsList() public view returns (address[] memory) {
         return portfolioAssets;
@@ -56,7 +63,7 @@ contract DegenAiPool is Initializable, UUPSUpgradeable, AccessControlUpgradeable
         return whitelistedAssets;
     }
 
-    // Returns two arrays: the portfolio asset addresses and their values via _getAssetValue
+    // Returns two arrays: the portfolio asset addresses and their values via _getAssetBalance
     function assetBalances() external view returns (address[] memory, uint256[] memory) {
         uint256 n = portfolioAssets.length;
         uint256[] memory balances = new uint256[](n);
@@ -73,7 +80,10 @@ contract DegenAiPool is Initializable, UUPSUpgradeable, AccessControlUpgradeable
     event Rebalanced(address[] sellAssets, uint256[] sellAmounts, address[] buyAssets, uint256[] buyAmounts);
     event AssetSwapped(address indexed fromToken, address indexed toToken, uint256 amountIn, uint256 amountOut);
 
-    function initialize(address _stableCoin, address _universalRouter, address _oracle, address _treasury, address _permit2) public initializer {
+    function initialize(address _stableCoin, address _universalRouter, 
+                        address _oracle, address _treasury, 
+                        address _permit2, address[] calldata tokens, bytes32[] calldata priceIds) 
+                        public initializer {
         __AccessControl_init();
         __ReentrancyGuard_init();
         __Pausable_init();
@@ -88,6 +98,17 @@ contract DegenAiPool is Initializable, UUPSUpgradeable, AccessControlUpgradeable
         permit2 = IPermit2(_permit2);
         treasury = _treasury;
         precision = 10000000000;
+        
+        address[] memory assets = new address[](1);
+        assets[0] = _stableCoin;
+        portfolioAssets = assets;
+
+        whitelistedAssets = tokens;
+        require(tokens.length == priceIds.length, "Tokens and Price IDs length mismatch");
+        for (uint256 i = 0; i < tokens.length; i++) {
+            tokensToPriceIds[tokens[i]] = priceIds[i];
+            pricesIdToTokens[priceIds[i]] = tokens[i];
+        }
     }
 
     function _authorizeUpgrade(address newImplementation) internal override onlyRole(DEFAULT_ADMIN_ROLE) {}
@@ -161,11 +182,22 @@ contract DegenAiPool is Initializable, UUPSUpgradeable, AccessControlUpgradeable
         amountOut = IERC20(token1).balanceOf(address(this)) - initialBalance;
     }
 
-    function invest(uint256 amount) external nonReentrant whenNotPaused {
+    function invest(uint256 amount,  bytes[] calldata pythUpdateData) external payable nonReentrant whenNotPaused {
         require(amount > 0, "Amount must be greater than 0");
         require(portfolioAssets.length > 0, "Porfolio assets not set yet");
         stableCoin.safeTransferFrom(msg.sender, address(this), amount);
-        uint256 totalPortfolioValue = getPortfolioValue();
+
+        bytes32[] memory tokenPricesId = new bytes32[](portfolioAssets.length);
+        for (uint256 i = 0; i < portfolioAssets.length; i++) {
+            tokenPricesId[i] = tokensToPriceIds[portfolioAssets[i]];
+        }
+
+        uint256[] memory prices =  priceOracle.getPrices(tokenPricesId, pythUpdateData);
+        uint256 totalPortfolioValue = 0;
+        for (uint256 i = 0; i < prices.length; i++) {
+            totalPortfolioValue += _getAssetBalance( pricesIdToTokens[tokenPricesId[i]] ) * prices[i] / 1e18;
+        }
+
         require(totalPortfolioValue > 0, "Portfolio Value must be greater than 0");
         uint256 sharesToMint = totalShares == 0 ? amount : (amount * totalShares) / totalPortfolioValue;
         userShares[msg.sender] += sharesToMint;
@@ -173,7 +205,7 @@ contract DegenAiPool is Initializable, UUPSUpgradeable, AccessControlUpgradeable
         totalShares += sharesToMint;
         for (uint256 i = 0; i < portfolioAssets.length; i++) {
             address asset = portfolioAssets[i];
-            uint256 totalAssetValue = _getAssetValue(asset);
+            uint256 totalAssetValue = ( _getAssetBalance(asset) * prices[i]) / 1e8; 
             uint256 assetPercentageToBuy = (totalAssetValue * 1e18) / totalPortfolioValue;
             uint256 amountToInvest = (amount * assetPercentageToBuy) / 1e18;
             if (amountToInvest > 0) {
@@ -216,39 +248,25 @@ contract DegenAiPool is Initializable, UUPSUpgradeable, AccessControlUpgradeable
         emit Withdraw(msg.sender, totalconverted, amountToUser, fee);
     } 
 
-    function _getAssetValue(address asset) internal view returns (uint256) {
-        uint256 balance = IERC20(asset).balanceOf(address(this));
-        uint256 price = priceOracle.getPrice(asset);
-
-        if(asset == 0x927B51f251480a681271180DA4de28D44EC4AfB8){
-            return (balance * price) / 1e8;
-        } else{
-            return (balance * price) / 1e18;
-        }
-        
-    }
-
     function _getAssetBalance(address asset) internal view returns (uint256) {
         return IERC20(asset).balanceOf(address(this));
     }
 
+    /*
+        function getUserShareValue(address user) public view returns (uint256) 
+        function _getAssetValue(address asset) internal view returns (uint256) 
+        function getPortfolioValue() public view returns (uint256) 
+    */
 
-
-    function getUserShareValue(address user) public view returns (uint256) {
-        return (userShares[user] * getPortfolioValue()) / totalShares;
-    }
-
-    function getPortfolioValue() public view returns (uint256) {
-        uint256 total = 0;
-        for (uint256 i = 0; i < portfolioAssets.length; i++) {
-            address asset = portfolioAssets[i];
-            total += _getAssetValue(asset);
+   function updateTokensPriceIds(address[] calldata tokens, bytes32[] calldata priceIds) external onlyRole(PORTFOLIO_MANAGER_ROLE) {
+        require(tokens.length == priceIds.length, "Tokens and Price IDs length mismatch");
+        for (uint256 i = 0; i < tokens.length; i++) {
+            tokensToPriceIds[tokens[i]] = priceIds[i];
+            pricesIdToTokens[priceIds[i]] = tokens[i];
         }
-        uint256 stableBalance = stableCoin.balanceOf(address(this));
-        return total + stableBalance;
     }
 
-    //Intial Settup
+ 
     function setPortfolioAssets(address[] calldata assets) external onlyRole(PORTFOLIO_MANAGER_ROLE) {
         portfolioAssets = assets;
     }
@@ -358,4 +376,7 @@ contract DegenAiPool is Initializable, UUPSUpgradeable, AccessControlUpgradeable
     function unpause() external onlyRole(DEFAULT_ADMIN_ROLE) {
         _unpause();
     }
+
+    receive() external payable {}
+
 }

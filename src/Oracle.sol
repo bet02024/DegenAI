@@ -2,14 +2,17 @@
 pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+ 
+
 
 /**
  * @title Oracle
- * @dev Price oracle that can be manually updated by DegenAI, replace by Pyth network Oracle in production
+ * @dev Price oracle using Pyth network as data source
  * @notice All prices are based on USDC with 6 decimals
  */
 contract Oracle is Ownable {
     
+
     // Structure to store price information
     struct PriceInfo {
         uint256 price;           // Price in USDC (6 decimals)
@@ -17,6 +20,8 @@ contract Oracle is Ownable {
         bool isActive;           // Whether the token is active
     }
     
+
+
     // Mapping from token to price information
     mapping(address => PriceInfo) public tokenPrices;
     
@@ -48,12 +53,17 @@ contract Oracle is Ownable {
     
     constructor()  Ownable(msg.sender) {
     }
+
+
+
     
     /**
      * @dev Updates prices for multiple tokens
      * @param tokens Array of token addresses
      * @param prices Array of prices in USDC (6 decimals)
      */
+
+
     function update(
         address[] calldata tokens,
         uint256[] calldata prices

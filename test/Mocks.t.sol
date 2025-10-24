@@ -20,19 +20,11 @@ contract MockPermit2 is IPermit2 {
     function approve(address, address, uint160, uint48) external override {}
 }
 
-contract MockOracle is IOracle {
-    mapping(address => uint256) public prices;
-    function update(
-        address[] calldata _tokens,
-        uint256[] calldata _prices
-    ) external{
-        for (uint256 i = 0; i < _tokens.length; i++) {
-            prices[_tokens[i]] = _prices[i];
-        }
-    }
-    function getPrice(address token) external view override returns (uint256) {
-        return prices[token];
-    }
+ contract MockOracle is IOracle {
+     function  getPrices(
+        bytes32[] memory tokenPricesId,
+        bytes[] calldata pythUpdateData
+    ) external virtual payable returns (uint256[] memory){}
 }
  
 
